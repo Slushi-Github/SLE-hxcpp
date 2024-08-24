@@ -301,7 +301,7 @@ class Compiler
       catch(e:Dynamic) { }
    }
 
-   public function compile(inFile:File,inTid:Int,headerFunc:Void->Void,pchTimeStamp:Null<Float>)
+public function compile(inFile:File, inTid:Int, headerFunc:Void->Void, pchTimeStamp:Null<Float>, inProgess:Null<Progress>)
    {
       var obj_name = getObjName(inFile);
       var args = getArgs(inFile);
@@ -313,6 +313,9 @@ class Compiler
       if (isRc)
          exe = mRcExe;
 
+      // Medir el tiempo de compilación
+      var startTime = haxe.Timer.stamp();
+
       var found = false;
       var cacheName:String = null;
       if (mCompilerVersion!=null && inFile.mGroup.isCached())
@@ -320,7 +323,6 @@ class Compiler
          cacheName = getHashedName(inFile, args);
          if (useCacheInPlace)
          {
-            //Log.info(""," link cache for " + obj_name );
             obj_name = cacheName;
          }
 
@@ -329,19 +331,18 @@ class Compiler
             var newer = true;
             if (pchTimeStamp!=null || inFile.mGroup.mRespectTimestamp)
             {
-               var time = FileSystem.stat(cacheName).mtime.getTime();
+                  var time = FileSystem.stat(cacheName).mtime.getTime();
 
-               if (pchTimeStamp!=null)
-                  newer = time>=pchTimeStamp;
-               if (inFile.mGroup.mRespectTimestamp)
-                  newer = newer && time>= FileSystem.stat(inFile.mDir + "/" + inFile.mName).mtime.getTime();
+                  if (pchTimeStamp!=null)
+                     newer = time>=pchTimeStamp;
+                  if (inFile.mGroup.mRespectTimestamp)
+                     newer = newer && time>= FileSystem.stat(inFile.mDir + "/" + inFile.mName).mtime.getTime();
             }
             if (newer)
             {
-               //Log.info(""," copy cache for " + obj_name );
-               if (!useCacheInPlace)
-                  sys.io.File.copy(cacheName, obj_name);
-               found = true;
+                  if (!useCacheInPlace)
+                     sys.io.File.copy(cacheName, obj_name);
+                  found = true;
             }
          }
       }
@@ -365,9 +366,9 @@ class Compiler
          else
          {
             if (isRc)
-               delayedFilename = (new Path( inFile.mDir + inFile.mName)).toString();
+                  delayedFilename = (new Path( inFile.mDir + inFile.mName)).toString();
             else
-               args.push( (new Path( inFile.mDir + inFile.mName)).toString() );
+                  args.push( (new Path( inFile.mDir + inFile.mName)).toString() );
          }
 
          var out = (nvcc||nasm) ? "-o " : mOutFlag;
@@ -380,7 +381,7 @@ class Compiler
          args.push(out + obj_name);
 
          if (delayedFilename!=null)
-           args.push(delayedFilename);
+            args.push(delayedFilename);
 
          var tagInfo = inFile.mTags==null ? "" : " " + inFile.mTags.split(",");
 
@@ -396,39 +397,57 @@ class Compiler
          }
          fileName += " \x1b[3m" + tagInfo + "\x1b[0m";
 
+         if (inProgess != null)
+         {
+            inProgess.progress(1);
+         }
+
+         function prepareText(compilationTime:Float):String {
+            if (inProgess != null)
+               if (compilationTime > 0)
+                  return inProgess.getProgress(true) + compilationTime + " ms]" + fileName;
+               else
+                  return inProgess.getProgress(false) + fileName;
+            return fileName;
+         }
 
          if (inTid >= 0)
          {
             if (BuildTool.threadExitCode == 0)
             {
-               if (!Log.verbose)
-               {
-                  Log.info(fileName);
-               }
-               var err = ProcessManager.runProcessThreaded(exe, args, null);
-               cleanTmp(tmpFile);
-               if (err!=0)
-               {
-                  if (FileSystem.exists(obj_name))
-                     FileSystem.deleteFile(obj_name);
-                  BuildTool.setThreadError(err);
-               }
+                  if (!Log.verbose)
+                  {
+                     var endTime = haxe.Timer.stamp();
+                     var duration = endTime - startTime;
+                     var roundedDuration = Math.round(duration);
+                     Log.info(prepareText(roundedDuration));
+                  }
+                  var err = ProcessManager.runProcessThreaded(exe, args, null);
+                  cleanTmp(tmpFile);
+                  if (err!=0)
+                  {
+                     if (FileSystem.exists(obj_name))
+                        FileSystem.deleteFile(obj_name);
+                     BuildTool.setThreadError(err);
+                  }
             }
          }
          else
          {
             if (!Log.verbose)
             {
-               Log.info(fileName);
+               var endTime = haxe.Timer.stamp();
+               var duration = endTime - startTime;
+               var roundedDuration = Math.round(duration);
+               Log.info(prepareText(roundedDuration));
             }
             var result = ProcessManager.runProcessThreaded(exe, args, null);
             cleanTmp(tmpFile);
             if (result!=0)
             {
-               if (FileSystem.exists(obj_name))
-                  FileSystem.deleteFile(obj_name);
-               Tools.exit (result);
-               //throw "Error : " + result + " - build cancelled";
+                  if (FileSystem.exists(obj_name))
+                     FileSystem.deleteFile(obj_name);
+                  Tools.exit (result);
             }
          }
 
