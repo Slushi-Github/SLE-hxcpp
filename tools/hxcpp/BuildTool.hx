@@ -638,7 +638,6 @@ class BuildTool
                         break;
                      var file = to_be_compiled[index];
                      compiler.compile(file, threadId, groupHeader, pchStamp, compile_progress);
-                     Log.info(" [COMPILED!]")
                   }
             });
          }
